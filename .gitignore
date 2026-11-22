@@ -1,0 +1,14 @@
+# Xcode & build outputs
+*.xcodeproj/
+*.xcworkspace/
+build/
+DerivedData/
+Payload/
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# macOS / Windows OS files
+.DS_Store
+Thumbs.db
+Desktop.ini

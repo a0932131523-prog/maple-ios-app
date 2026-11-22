@@ -1,0 +1,84 @@
+name: Build iOS IPA (Unsigned)
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-ipa:
+    name: Build MapleAssistant.ipa
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Show Xcode environment
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build unsigned Release app for iOS device (arm64)
+        run: |
+          xcodebuild \
+            -project MapleAssistant.xcodeproj \
+            -scheme MapleAssistant \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination "generic/platform=iOS" \
+            -derivedDataPath build \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Package Payload into MapleAssistant.ipa
+        run: |
+          APP_PATH="build/Build/Products/Release-iphoneos/MapleAssistant.app"
+          if [ ! -d "$APP_PATH" ]; then
+            echo "Error: $APP_PATH not found!"
+            find build -maxdepth 5
+            exit 1
+          fi
+
+          rm -rf Payload MapleAssistant.ipa
+          mkdir -p Payload
+          cp -R "$APP_PATH" Payload/
+
+          echo "=== Verifying executable architecture ==="
+          file Payload/MapleAssistant.app/MapleAssistant
+
+          echo "=== Verifying Info.plist ==="
+          plutil -p Payload/MapleAssistant.app/Info.plist
+
+          zip -r -y MapleAssistant.ipa Payload
+          ls -lh MapleAssistant.ipa
+
+      - name: Upload MapleAssistant.ipa Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MapleAssistant-iOS-IPA
+          path: MapleAssistant.ipa
+          retention-days: 90
+
+      - name: Attach IPA to GitHub Release (on tag push)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: MapleAssistant.ipa
