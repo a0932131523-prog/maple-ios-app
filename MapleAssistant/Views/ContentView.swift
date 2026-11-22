@@ -60,9 +60,6 @@ struct ContentView: View {
                     },
                     onDismissEditing: {
                         dismissEditing()
-                    },
-                    onAddRow: {
-                        addAndFocusNewRow()
                     }
                 )
             }
@@ -130,7 +127,7 @@ struct ContentView: View {
                 provisioningInfo = ProvisioningReader.read()
                 showCertInfoAlert = true
             } label: {
-                TimelineView(.periodic(from: .now, by: 60)) { context in
+                TimelineView(.periodic(from: .now, by: 1)) { context in
                     HStack(spacing: 6) {
                         Text("🍁")
                             .font(.system(size: 15))

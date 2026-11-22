@@ -17,31 +17,35 @@ struct ProvisioningInfo: Equatable {
         let days = remaining / 86400
         let hours = (remaining % 86400) / 3600
         let minutes = (remaining % 3600) / 60
+        let seconds = remaining % 60
+
+        let hStr = String(format: "%02d", hours)
+        let mStr = String(format: "%02d", minutes)
+        let sStr = String(format: "%02d", seconds)
 
         if days >= 1 {
-            return "續簽剩 \(days)天\(hours)時"
-        } else if hours >= 1 {
-            return "續簽剩 \(hours)時\(minutes)分"
+            return "續簽 \(days)天 \(hStr)時\(mStr)分\(sStr)秒"
         } else {
-            return "續簽剩 \(max(minutes, 1))分"
+            return "續簽 \(hStr)時\(mStr)分\(sStr)秒"
         }
     }
 
     func detailedMessage(from now: Date) -> String {
         let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy/MM/dd HH:mm"
+        formatter.dateFormat = "yyyy/MM/dd HH:mm:ss"
 
         let remaining = max(0, Int(remainingSeconds(from: now)))
         let days = remaining / 86400
         let hours = (remaining % 86400) / 3600
         let minutes = (remaining % 3600) / 60
+        let seconds = remaining % 60
 
         var lines: [String] = []
         if let created = creationDate {
             lines.append("上次續簽：\(formatter.string(from: created))")
         }
         lines.append("到期時間：\(formatter.string(from: expirationDate))")
-        lines.append("剩餘時間：\(days) 天 \(hours) 小時 \(minutes) 分")
+        lines.append("剩餘時間：\(days) 天 \(hours) 小時 \(minutes) 分 \(seconds) 秒")
         lines.append("")
         lines.append("當電腦開機且與 iPhone 連同一個 Wi-Fi 時，Sideloadly 會自動續簽並將倒數重設回 7 天。")
         return lines.joined(separator: "\n")

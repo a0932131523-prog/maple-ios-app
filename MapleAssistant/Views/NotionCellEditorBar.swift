@@ -27,8 +27,16 @@ struct NotionCellEditorBar: View {
     }
 
     private var currentRowLabel: String {
-        guard let idx = currentRowIndex else { return "" }
-        return "第 \(idx + 1) 列"
+        guard let target = target,
+              let row = store.rows.first(where: { $0.id == target.rowID }) else { return "" }
+        let name = row.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !name.isEmpty {
+            return name
+        }
+        if let idx = currentRowIndex {
+            return "第 \(idx + 1) 列"
+        }
+        return ""
     }
 
     private var placeholderText: String {
@@ -59,8 +67,10 @@ struct NotionCellEditorBar: View {
 
                     if !currentRowLabel.isEmpty {
                         Text(currentRowLabel)
-                            .font(.system(size: 11, weight: .medium).monospacedDigit())
-                            .foregroundColor(AppColors.textTertiary)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(AppColors.textPrimary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
                     }
                 }
 

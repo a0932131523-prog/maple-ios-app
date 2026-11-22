@@ -7,7 +7,6 @@ struct TaskTableView: View {
     let isReorderMode: Bool
     let onSelectCell: (EditingTarget) -> Void
     let onDismissEditing: () -> Void
-    let onAddRow: () -> Void
 
     private let headerHeight: CGFloat = 46
 
@@ -41,7 +40,7 @@ struct TaskTableView: View {
                             // 2. Vertically Scrollable Task Rows
                             ScrollViewReader { vProxy in
                                 ScrollView(.vertical, showsIndicators: false) {
-                                    LazyVStack(spacing: 0) {
+                                    VStack(spacing: 0) {
                                         if store.filteredRows.isEmpty {
                                             emptySearchView(width: totalTableWidth)
                                         } else {
@@ -65,11 +64,10 @@ struct TaskTableView: View {
                                             }
                                         }
 
-                                        addRowFooterButton(width: totalTableWidth)
-
-                                        // Notion-style bottom space so bottom rows scroll cleanly above keyboard & editor bar
+                                        // Bottom breathing space so bottom rows (e.g. Row 7/8) scroll cleanly above keyboard & editor bar
                                         Color.clear
-                                            .frame(height: editingTarget != nil ? 400 : 40)
+                                            .frame(height: editingTarget != nil ? max(cardHeight * 0.85, 500) : 24)
+                                            .transaction { $0.animation = nil }
                                             .contentShape(Rectangle())
                                             .onTapGesture {
                                                 if editingTarget != nil {
@@ -81,11 +79,21 @@ struct TaskTableView: View {
                                 .onValueChange(of: scrollToRowID) { targetID in
                                     guard let targetID = targetID else { return }
                                     Task { @MainActor in
-                                        try? await Task.sleep(nanoseconds: 40_000_000)
+                                        try? await Task.sleep(nanoseconds: 100_000_000)
                                         withAnimation(.easeOut(duration: 0.24)) {
-                                            vProxy.scrollTo(targetID, anchor: UnitPoint(x: 0.5, y: 0.22))
+                                            vProxy.scrollTo(targetID, anchor: UnitPoint(x: 0.5, y: 0.25))
                                         }
                                         scrollToRowID = nil
+                                    }
+                                }
+                                .onValueChange(of: editingTarget) { newTarget in
+                                    if newTarget == nil, let firstID = store.filteredRows.first?.id, store.filteredRows.count <= 10 {
+                                        Task { @MainActor in
+                                            try? await Task.sleep(nanoseconds: 80_000_000)
+                                            withAnimation(.easeOut(duration: 0.22)) {
+                                                vProxy.scrollTo(firstID, anchor: .top)
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -206,24 +214,5 @@ struct TaskTableView: View {
                 .foregroundColor(AppColors.textTertiary)
         }
         .frame(width: width, height: 110)
-    }
-
-    private func addRowFooterButton(width: CGFloat) -> some View {
-        Button {
-            onAddRow()
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "plus")
-                    .font(.system(size: 13, weight: .light))
-                Text("全新 任務")
-                    .font(.system(size: 14, weight: .regular))
-                Spacer()
-            }
-            .foregroundColor(AppColors.textMuted)
-            .padding(.horizontal, 14)
-            .frame(width: width, height: 46, alignment: .leading)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
     }
 }
