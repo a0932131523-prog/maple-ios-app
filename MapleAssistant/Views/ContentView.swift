@@ -2,8 +2,9 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var store = TaskStore()
-    @FocusState private var focusedField: FocusField?
+    @FocusState private var isSearchFocused: Bool
 
+    @State private var editingTarget: EditingTarget? = nil
     @State private var showSearchBar: Bool = false
     @State private var showConfigPanel: Bool = false
     @State private var isReorderMode: Bool = false
@@ -11,116 +12,96 @@ struct ContentView: View {
     @State private var scrollToRowID: UUID? = nil
 
     var body: some View {
-        NavigationStack {
-            ZStack(alignment: .bottom) {
-                AppColors.background
-                    .ignoresSafeArea()
+        ZStack(alignment: .top) {
+            AppColors.background
+                .ignoresSafeArea()
 
-                VStack(spacing: 0) {
-                    // Top Navigation Header
-                    topBar
-                        .padding(.horizontal, 16)
-                        .padding(.top, 6)
-                        .padding(.bottom, 6)
-
-                    // Title & Subtitle Badge
-                    titleSection
-                        .padding(.horizontal, 20)
-                        .padding(.bottom, 10)
-
-                    // Controls Toolbar + Collapsible Search / Settings Panels
-                    VStack(spacing: 10) {
-                        controlsBar
-
-                        if showSearchBar {
-                            searchBar
-                                .transition(.move(edge: .top).combined(with: .opacity))
-                        }
-
-                        if showConfigPanel {
-                            SettingsPanelView(
-                                store: store,
-                                isPresented: $showConfigPanel,
-                                isReorderMode: $isReorderMode
-                            )
-                            .transition(.move(edge: .top).combined(with: .opacity))
-                        }
-                    }
+            // LAYER 1: Main UI — pinned to top & completely immune to keyboard resizing/clipping
+            VStack(spacing: 0) {
+                topBar
                     .padding(.horizontal, 16)
+                    .padding(.top, 6)
+                    .padding(.bottom, 6)
+
+                titleSection
+                    .padding(.horizontal, 20)
                     .padding(.bottom, 10)
 
-                    // Main Pinned-Header Interactive Table
-                    TaskTableView(
-                        store: store,
-                        focusedField: $focusedField,
-                        scrollToRowID: $scrollToRowID,
-                        isReorderMode: isReorderMode,
-                        onAddRow: {
-                            addAndFocusNewRow()
-                        }
-                    )
-                }
+                VStack(spacing: 10) {
+                    controlsBar
 
-                // Undo Delete Floating Toast
-                if let deleted = store.recentlyDeleted {
+                    if showSearchBar {
+                        searchBar
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                    }
+
+                    if showConfigPanel {
+                        SettingsPanelView(
+                            store: store,
+                            isPresented: $showConfigPanel,
+                            isReorderMode: $isReorderMode
+                        )
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 10)
+
+                TaskTableView(
+                    store: store,
+                    editingTarget: $editingTarget,
+                    scrollToRowID: $scrollToRowID,
+                    isReorderMode: isReorderMode,
+                    onSelectCell: { target in
+                        selectCellForEditing(target)
+                    },
+                    onDismissEditing: {
+                        dismissEditing()
+                    },
+                    onAddRow: {
+                        addAndFocusNewRow()
+                    }
+                )
+            }
+            .ignoresSafeArea(.keyboard, edges: .bottom)
+
+            // LAYER 2: Floating bottom overlay (respects keyboard safe area so it sits flush above keyboard!)
+            VStack(spacing: 0) {
+                Spacer(minLength: 0)
+
+                if let deleted = store.recentlyDeleted, editingTarget == nil {
                     undoToast(for: deleted)
                         .padding(.horizontal, 20)
                         .padding(.bottom, 20)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
-            }
-            .toolbar(.hidden, for: .navigationBar)
-            .toolbar {
-                ToolbarItemGroup(placement: .keyboard) {
-                    HStack(spacing: 12) {
-                        Button {
-                            moveFocus(step: -1)
-                        } label: {
-                            Image(systemName: "chevron.up")
-                                .font(.system(size: 15, weight: .semibold))
-                                .foregroundColor(AppColors.textPrimary)
-                        }
 
-                        Button {
-                            moveFocus(step: 1)
-                        } label: {
-                            Image(systemName: "chevron.down")
-                                .font(.system(size: 15, weight: .semibold))
-                                .foregroundColor(AppColors.textPrimary)
+                if editingTarget != nil {
+                    NotionCellEditorBar(
+                        store: store,
+                        target: $editingTarget,
+                        onJumpRow: { step in
+                            jumpEditingRow(by: step)
+                        },
+                        onSwitchColumn: { newTarget in
+                            editingTarget = newTarget
+                        },
+                        onDone: {
+                            dismissEditing()
                         }
-                    }
-
-                    Spacer()
-
-                    Button {
-                        Haptics.light()
-                        focusedField = nil
-                    } label: {
-                        HStack(spacing: 5) {
-                            Image(systemName: "checkmark")
-                                .font(.system(size: 12, weight: .bold))
-                            Text("完成編輯")
-                                .font(.system(size: 13, weight: .semibold))
-                        }
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(
-                            Capsule()
-                                .fill(AppColors.accentBlue)
-                        )
-                    }
+                    )
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
-            .alert("重設預設值", isPresented: $showResetAlert) {
-                Button("取消", role: .cancel) {}
-                Button("確定重設", role: .destructive) {
-                    focusedField = nil
-                    store.resetToDefault()
-                }
-            } message: {
-                Text("是否將任務列表重設為預設值？這將會清除您目前的所有修改！")
+        }
+        .alert("重設預設值", isPresented: $showResetAlert) {
+            Button("取消", role: .cancel) {}
+            Button("確定重設", role: .destructive) {
+                dismissEditing()
+                store.resetToDefault()
             }
+        } message: {
+            Text("是否將任務列表重設為預設值？這將會清除您目前的所有修改！")
         }
         .preferredColorScheme(.dark)
     }
@@ -148,6 +129,7 @@ struct ContentView: View {
 
                 Button {
                     Haptics.light()
+                    dismissEditing()
                     withAnimation(.easeInOut(duration: 0.2)) {
                         showConfigPanel.toggle()
                     }
@@ -189,7 +171,6 @@ struct ContentView: View {
 
     private var controlsBar: some View {
         HStack {
-            // Left: ★ 任務列表 + Sync indicator dot
             HStack(spacing: 6) {
                 Text("★")
                     .font(.system(size: 16))
@@ -212,19 +193,17 @@ struct ContentView: View {
 
             Spacer()
 
-            // Right: Search, Reset, Settings, + New Row
             HStack(spacing: 14) {
                 Button {
                     Haptics.light()
+                    dismissEditing()
                     withAnimation(.easeInOut(duration: 0.2)) {
                         showSearchBar.toggle()
                         if showSearchBar {
-                            focusedField = .search
+                            isSearchFocused = true
                         } else {
                             store.searchText = ""
-                            if focusedField == .search {
-                                focusedField = nil
-                            }
+                            isSearchFocused = false
                         }
                     }
                 } label: {
@@ -238,6 +217,7 @@ struct ContentView: View {
 
                 Button {
                     Haptics.light()
+                    dismissEditing()
                     showResetAlert = true
                 } label: {
                     Image(systemName: "arrow.counterclockwise")
@@ -250,6 +230,7 @@ struct ContentView: View {
 
                 Button {
                     Haptics.light()
+                    dismissEditing()
                     withAnimation(.easeInOut(duration: 0.2)) {
                         showConfigPanel.toggle()
                     }
@@ -298,8 +279,11 @@ struct ContentView: View {
                 .font(.system(size: 15))
                 .foregroundColor(.white)
                 .tint(AppColors.accentBlue)
-                .focused($focusedField, equals: .search)
+                .focused($isSearchFocused)
                 .submitLabel(.search)
+                .onSubmit {
+                    isSearchFocused = false
+                }
 
             if !store.searchText.isEmpty {
                 Button {
@@ -325,8 +309,9 @@ struct ContentView: View {
     }
 
     private func undoToast(for deleted: DeletedRowSnapshot) -> some View {
-        HStack(spacing: 12) {
-            Text("已刪除「\(deleted.row.title)」")
+        let displayTitle = deleted.row.title.isEmpty ? "未命名任務" : deleted.row.title
+        return HStack(spacing: 12) {
+            Text("已刪除「\(displayTitle)」")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundColor(.white)
                 .lineLimit(1)
@@ -355,31 +340,53 @@ struct ContentView: View {
         .shadow(color: Color.black.opacity(0.6), radius: 14, y: 6)
     }
 
-    private func addAndFocusNewRow() {
-        let newID = store.addNewRow()
-        Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 80_000_000)
-            scrollToRowID = newID
-            focusedField = .title(newID)
+    private func selectCellForEditing(_ target: EditingTarget) {
+        Haptics.light()
+        isSearchFocused = false
+        if showConfigPanel {
+            withAnimation(.easeInOut(duration: 0.18)) {
+                showConfigPanel = false
+            }
+        }
+        withAnimation(.easeOut(duration: 0.18)) {
+            editingTarget = target
+        }
+        // Auto-scroll when tapping row 4+ (index >= 3) so lower rows sit cleanly above keyboard & editor bar
+        if let idx = store.rowIndex(for: target.rowID), idx >= 3 {
+            scrollToRowID = target.rowID
         }
     }
 
-    private func moveFocus(step: Int) {
-        let allFields: [FocusField] = store.filteredRows.flatMap { row in
-            [.title(row.id), .col4(row.id)]
+    private func dismissEditing() {
+        isSearchFocused = false
+        withAnimation(.easeOut(duration: 0.18)) {
+            editingTarget = nil
         }
-        guard let current = focusedField,
-              let idx = allFields.firstIndex(of: current) else { return }
+    }
+
+    private func addAndFocusNewRow() {
+        isSearchFocused = false
+        let newID = store.addNewRow()
+        withAnimation(.easeOut(duration: 0.18)) {
+            editingTarget = .title(newID)
+        }
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 60_000_000)
+            scrollToRowID = newID
+        }
+    }
+
+    private func jumpEditingRow(by step: Int) {
+        guard let current = editingTarget,
+              let idx = store.rowIndex(for: current.rowID) else { return }
         let nextIdx = idx + step
-        guard nextIdx >= 0 && nextIdx < allFields.count else { return }
+        let list = store.filteredRows
+        guard nextIdx >= 0 && nextIdx < list.count else { return }
+
         Haptics.light()
-        let nextField = allFields[nextIdx]
-        focusedField = nextField
-        switch nextField {
-        case .title(let id), .col4(let id):
-            scrollToRowID = id
-        case .search:
-            break
-        }
+        let nextRowID = list[nextIdx].id
+        let nextTarget: EditingTarget = current.isTitle ? .title(nextRowID) : .col4(nextRowID)
+        editingTarget = nextTarget
+        scrollToRowID = nextRowID
     }
 }

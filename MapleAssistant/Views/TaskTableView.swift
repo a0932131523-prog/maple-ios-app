@@ -2,9 +2,11 @@ import SwiftUI
 
 struct TaskTableView: View {
     @ObservedObject var store: TaskStore
-    var focusedField: FocusState<FocusField?>.Binding
+    @Binding var editingTarget: EditingTarget?
     @Binding var scrollToRowID: UUID?
     let isReorderMode: Bool
+    let onSelectCell: (EditingTarget) -> Void
+    let onDismissEditing: () -> Void
     let onAddRow: () -> Void
 
     private let headerHeight: CGFloat = 46
@@ -29,14 +31,14 @@ struct TaskTableView: View {
                             .id("tableLeftEdge")
 
                         VStack(spacing: 0) {
-                            // 1. Permanently Pinned Table Header (never hides behind keyboard or scrolls away)
+                            // 1. Permanently Pinned Table Header
                             tableHeader(effectiveCol4Width: effectiveCol4Width)
 
                             Rectangle()
                                 .fill(AppColors.border)
                                 .frame(height: 1)
 
-                            // 2. Vertically Scrollable Task Rows (starts strictly below the header)
+                            // 2. Vertically Scrollable Task Rows
                             ScrollViewReader { vProxy in
                                 ScrollView(.vertical, showsIndicators: false) {
                                     LazyVStack(spacing: 0) {
@@ -50,14 +52,10 @@ struct TaskTableView: View {
                                                     totalCount: store.filteredRows.count,
                                                     isReorderMode: isReorderMode,
                                                     store: store,
-                                                    focusedField: focusedField,
+                                                    editingTarget: editingTarget,
                                                     effectiveCol4Width: effectiveCol4Width,
-                                                    onSubmitTitle: {
-                                                        focusedField.wrappedValue = .col4(row.id)
-                                                    },
-                                                    onSubmitCol4: {
-                                                        handleSubmitCol4(currentRowID: row.id)
-                                                    }
+                                                    onSelectCell: onSelectCell,
+                                                    onDismissEditing: onDismissEditing
                                                 )
                                                 .id(row.id)
 
@@ -69,17 +67,26 @@ struct TaskTableView: View {
 
                                         addRowFooterButton(width: totalTableWidth)
 
-                                        // Bottom breathing room for comfortable scrolling
-                                        Color.clear.frame(height: 80)
+                                        // Notion-style bottom space so bottom rows scroll cleanly above keyboard & editor bar
+                                        Color.clear
+                                            .frame(height: editingTarget != nil ? 400 : 40)
+                                            .contentShape(Rectangle())
+                                            .onTapGesture {
+                                                if editingTarget != nil {
+                                                    onDismissEditing()
+                                                }
+                                            }
                                     }
                                 }
-                                .scrollDismissesKeyboard(.interactively)
                                 .onValueChange(of: scrollToRowID) { targetID in
                                     guard let targetID = targetID else { return }
-                                    withAnimation(.easeOut(duration: 0.25)) {
-                                        vProxy.scrollTo(targetID, anchor: .center)
+                                    Task { @MainActor in
+                                        try? await Task.sleep(nanoseconds: 40_000_000)
+                                        withAnimation(.easeOut(duration: 0.24)) {
+                                            vProxy.scrollTo(targetID, anchor: UnitPoint(x: 0.5, y: 0.22))
+                                        }
+                                        scrollToRowID = nil
                                     }
-                                    scrollToRowID = nil
                                 }
                             }
                         }
@@ -95,8 +102,8 @@ struct TaskTableView: View {
                         .padding(.bottom, 12)
                     }
                 }
-                .onValueChange(of: focusedField.wrappedValue) { newField in
-                    if newField == nil {
+                .onValueChange(of: editingTarget) { newTarget in
+                    if newTarget == nil {
                         Task { @MainActor in
                             try? await Task.sleep(nanoseconds: 60_000_000)
                             withAnimation(.easeOut(duration: 0.25)) {
@@ -164,8 +171,8 @@ struct TaskTableView: View {
     private func columnClearHeader(_ column: TaskColumn, width: CGFloat) -> some View {
         let restorable = store.isColumnRestorable(column)
         return Button {
-            if focusedField.wrappedValue != nil {
-                focusedField.wrappedValue = nil
+            if editingTarget != nil {
+                onDismissEditing()
             }
             store.handleClearColumn(column)
         } label: {
@@ -218,17 +225,5 @@ struct TaskTableView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-    }
-
-    private func handleSubmitCol4(currentRowID: UUID) {
-        let currentRows = store.filteredRows
-        if let idx = currentRows.firstIndex(where: { $0.id == currentRowID }),
-           idx < currentRows.count - 1 {
-            let nextID = currentRows[idx + 1].id
-            focusedField.wrappedValue = .title(nextID)
-            scrollToRowID = nextID
-        } else {
-            onAddRow()
-        }
     }
 }

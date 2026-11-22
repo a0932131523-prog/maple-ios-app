@@ -105,10 +105,21 @@ struct ColumnWidths: Codable, Equatable {
     }
 }
 
-enum FocusField: Hashable {
-    case search
+enum EditingTarget: Equatable, Hashable {
     case title(UUID)
     case col4(UUID)
+
+    var rowID: UUID {
+        switch self {
+        case .title(let id), .col4(let id):
+            return id
+        }
+    }
+
+    var isTitle: Bool {
+        if case .title = self { return true }
+        return false
+    }
 }
 
 struct DeletedRowSnapshot: Equatable {

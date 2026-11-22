@@ -6,18 +6,26 @@ struct TaskRowView: View {
     let totalCount: Int
     let isReorderMode: Bool
     @ObservedObject var store: TaskStore
-    var focusedField: FocusState<FocusField?>.Binding
+    let editingTarget: EditingTarget?
     let effectiveCol4Width: CGFloat
-    let onSubmitTitle: () -> Void
-    let onSubmitCol4: () -> Void
+    let onSelectCell: (EditingTarget) -> Void
+    let onDismissEditing: () -> Void
+
+    private var isEditingTitle: Bool {
+        editingTarget == .title(row.id)
+    }
+
+    private var isEditingCol4: Bool {
+        editingTarget == .col4(row.id)
+    }
 
     private var isEditingRow: Bool {
-        focusedField.wrappedValue == .title(row.id) || focusedField.wrappedValue == .col4(row.id)
+        isEditingTitle || isEditingCol4
     }
 
     var body: some View {
         HStack(spacing: 0) {
-            // Column 1: 任務名稱
+            // Column 1: 任務名稱 (Notion-style tappable cell)
             HStack(spacing: 4) {
                 if isReorderMode {
                     VStack(spacing: 2) {
@@ -48,28 +56,29 @@ struct TaskRowView: View {
                     .padding(.leading, 4)
                 }
 
-                TextField("", text: store.bindingForTitle(id: row.id))
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(AppColors.textPrimary)
-                    .tint(AppColors.accentBlue)
-                    .focused(focusedField, equals: .title(row.id))
-                    .submitLabel(.next)
-                    .onSubmit {
-                        onSubmitTitle()
+                Button {
+                    onSelectCell(.title(row.id))
+                } label: {
+                    HStack {
+                        Text(row.title.isEmpty ? "未命名任務" : row.title)
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(row.title.isEmpty ? AppColors.textMuted : AppColors.textPrimary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                        Spacer(minLength: 0)
                     }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 5)
-                    .background(
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .fill(focusedField.wrappedValue == .title(row.id) ? AppColors.controlBg : Color.clear)
-                    )
+                    .padding(.horizontal, 10)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                    .background(isEditingTitle ? AppColors.accentBlue.opacity(0.16) : Color.clear)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .stroke(focusedField.wrappedValue == .title(row.id) ? Color(hex: 0x444444) : Color.clear, lineWidth: 1)
+                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                            .stroke(isEditingTitle ? AppColors.accentBlue : Color.clear, lineWidth: 1.5)
+                            .padding(1)
                     )
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
             }
-            .padding(.horizontal, isReorderMode ? 4 : 6)
             .frame(width: store.colWidths.title, height: store.rowSpacing.minRowHeight, alignment: .leading)
 
             verticalDivider
@@ -89,46 +98,46 @@ struct TaskRowView: View {
 
             verticalDivider
 
-            // Column 5: 備註可掛 + Delete button
-            HStack(spacing: 4) {
-                TextField("", text: store.bindingForCol4(id: row.id))
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 15, weight: .regular))
-                    .foregroundColor(Color(hex: 0xD4D4D4))
-                    .tint(AppColors.accentBlue)
-                    .focused(focusedField, equals: .col4(row.id))
-                    .submitLabel(.next)
-                    .onSubmit {
-                        onSubmitCol4()
+            // Column 5: 備註可掛 (Notion-style tappable cell) + Delete button
+            HStack(spacing: 0) {
+                Button {
+                    onSelectCell(.col4(row.id))
+                } label: {
+                    HStack {
+                        Text(row.col4.isEmpty ? " " : row.col4)
+                            .font(.system(size: 15, weight: .regular))
+                            .foregroundColor(Color(hex: 0xD4D4D4))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                        Spacer(minLength: 0)
                     }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 5)
-                    .background(
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .fill(focusedField.wrappedValue == .col4(row.id) ? AppColors.controlBg : Color.clear)
-                    )
+                    .padding(.horizontal, 10)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                    .background(isEditingCol4 ? AppColors.accentBlue.opacity(0.16) : Color.clear)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .stroke(focusedField.wrappedValue == .col4(row.id) ? Color(hex: 0x444444) : Color.clear, lineWidth: 1)
+                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                            .stroke(isEditingCol4 ? AppColors.accentBlue : Color.clear, lineWidth: 1.5)
+                            .padding(1)
                     )
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
 
                 Button {
                     if isEditingRow {
-                        focusedField.wrappedValue = nil
+                        onDismissEditing()
                     }
                     store.deleteRow(id: row.id)
                 } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 11, weight: .medium))
                         .foregroundColor(AppColors.textMuted)
-                        .frame(width: 26, height: 26)
+                        .frame(width: 30, height: store.rowSpacing.minRowHeight)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("刪除任務")
             }
-            .padding(.leading, 6)
-            .padding(.trailing, 4)
             .frame(width: effectiveCol4Width, height: store.rowSpacing.minRowHeight, alignment: .leading)
         }
         .background(isEditingRow ? AppColors.rowEditing : AppColors.surface)
@@ -142,8 +151,8 @@ struct TaskRowView: View {
 
     private func checkboxCell(isChecked: Bool, column: TaskColumn, width: CGFloat) -> some View {
         Button {
-            if focusedField.wrappedValue != nil {
-                focusedField.wrappedValue = nil
+            if editingTarget != nil {
+                onDismissEditing()
             }
             store.toggleCheckbox(id: row.id, column: column)
         } label: {

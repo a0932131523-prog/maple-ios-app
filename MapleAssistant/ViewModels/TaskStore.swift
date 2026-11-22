@@ -52,36 +52,34 @@ final class TaskStore: ObservableObject {
         }
     }
 
-    func bindingForTitle(id: UUID) -> Binding<String> {
-        Binding(
-            get: { [weak self] in
-                self?.rows.first(where: { $0.id == id })?.title ?? ""
-            },
-            set: { [weak self] newValue in
-                guard let self = self,
-                      let idx = self.rows.firstIndex(where: { $0.id == id }) else { return }
-                if self.rows[idx].title != newValue {
-                    self.rows[idx].title = newValue
-                    self.scheduleSave()
-                }
-            }
-        )
+    func text(for target: EditingTarget) -> String {
+        guard let row = rows.first(where: { $0.id == target.rowID }) else { return "" }
+        switch target {
+        case .title:
+            return row.title
+        case .col4:
+            return row.col4
+        }
     }
 
-    func bindingForCol4(id: UUID) -> Binding<String> {
-        Binding(
-            get: { [weak self] in
-                self?.rows.first(where: { $0.id == id })?.col4 ?? ""
-            },
-            set: { [weak self] newValue in
-                guard let self = self,
-                      let idx = self.rows.firstIndex(where: { $0.id == id }) else { return }
-                if self.rows[idx].col4 != newValue {
-                    self.rows[idx].col4 = newValue
-                    self.scheduleSave()
-                }
+    func setText(_ newValue: String, for target: EditingTarget) {
+        guard let idx = rows.firstIndex(where: { $0.id == target.rowID }) else { return }
+        switch target {
+        case .title:
+            if rows[idx].title != newValue {
+                rows[idx].title = newValue
+                scheduleSave()
             }
-        )
+        case .col4:
+            if rows[idx].col4 != newValue {
+                rows[idx].col4 = newValue
+                scheduleSave()
+            }
+        }
+    }
+
+    func rowIndex(for id: UUID) -> Int? {
+        filteredRows.firstIndex(where: { $0.id == id })
     }
 
     func toggleCheckbox(id: UUID, column: TaskColumn) {
@@ -130,7 +128,7 @@ final class TaskStore: ObservableObject {
         if !searchText.isEmpty {
             searchText = ""
         }
-        let newRow = TaskRow(title: "全新 任務", col1: false, col2: false, col3: false, col4: "")
+        let newRow = TaskRow(title: "", col1: false, col2: false, col3: false, col4: "")
         withAnimation(.easeOut(duration: 0.2)) {
             rows.append(newRow)
         }
@@ -214,12 +212,13 @@ final class TaskStore: ObservableObject {
     func shareSummaryText() -> String {
         var lines: [String] = ["🍁 楓 - 任務列表"]
         for row in rows {
+            let displayTitle = row.title.isEmpty ? "未命名任務" : row.title
             let c1 = row.col1 ? "✅" : "⬜"
             let c2 = row.col2 ? "✅" : "⬜"
             let c3 = row.col3 ? "✅" : "⬜"
             let note = row.col4.trimmingCharacters(in: .whitespacesAndNewlines)
             let notePart = note.isEmpty ? "" : "｜\(note)"
-            lines.append("\(row.title)  掛\(c1) 副\(c2) 活\(c3)\(notePart)")
+            lines.append("\(displayTitle)  掛\(c1) 副\(c2) 活\(c3)\(notePart)")
         }
         return lines.joined(separator: "\n")
     }
