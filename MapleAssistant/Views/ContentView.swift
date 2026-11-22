@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ContentView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var store = TaskStore()
     @FocusState private var isSearchFocused: Bool
 
@@ -9,6 +10,8 @@ struct ContentView: View {
     @State private var showConfigPanel: Bool = false
     @State private var isReorderMode: Bool = false
     @State private var showResetAlert: Bool = false
+    @State private var showCertInfoAlert: Bool = false
+    @State private var provisioningInfo: ProvisioningInfo? = ProvisioningReader.read()
     @State private var scrollToRowID: UUID? = nil
 
     var body: some View {
@@ -103,18 +106,64 @@ struct ContentView: View {
         } message: {
             Text("是否將任務列表重設為預設值？這將會清除您目前的所有修改！")
         }
+        .alert("憑證續簽倒數", isPresented: $showCertInfoAlert) {
+            Button("知道了", role: .cancel) {}
+        } message: {
+            if let info = provisioningInfo {
+                Text(info.detailedMessage(from: Date()))
+            } else {
+                Text("目前找不到簽章憑證到期資訊，App 可正常離線使用。")
+            }
+        }
+        .onValueChange(of: scenePhase) { phase in
+            if phase == .active {
+                provisioningInfo = ProvisioningReader.read()
+            }
+        }
         .preferredColorScheme(.dark)
     }
 
     private var topBar: some View {
         HStack {
-            HStack(spacing: 6) {
-                Text("🍁")
-                    .font(.system(size: 16))
-                Text("Offline Ready")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(AppColors.textMuted)
+            Button {
+                Haptics.light()
+                provisioningInfo = ProvisioningReader.read()
+                showCertInfoAlert = true
+            } label: {
+                TimelineView(.periodic(from: .now, by: 60)) { context in
+                    HStack(spacing: 6) {
+                        Text("🍁")
+                            .font(.system(size: 15))
+
+                        if let info = provisioningInfo {
+                            let color = info.statusColor(from: context.date)
+                            Circle()
+                                .fill(color)
+                                .frame(width: 6.5, height: 6.5)
+                                .shadow(color: color.opacity(0.7), radius: 2.5)
+
+                            Text(info.compactLabel(from: context.date))
+                                .font(.system(size: 11.5, weight: .semibold).monospacedDigit())
+                                .foregroundColor(color == AppColors.emerald ? AppColors.textSecondary : color)
+                        } else {
+                            Text("離線可用")
+                                .font(.system(size: 11.5, weight: .medium))
+                                .foregroundColor(AppColors.textMuted)
+                        }
+                    }
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 5)
+                    .background(
+                        Capsule()
+                            .fill(AppColors.controlBg.opacity(0.85))
+                    )
+                    .overlay(
+                        Capsule()
+                            .stroke(AppColors.subtleBorder, lineWidth: 1)
+                    )
+                }
             }
+            .buttonStyle(.plain)
 
             Spacer()
 
