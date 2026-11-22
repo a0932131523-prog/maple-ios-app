@@ -47,7 +47,7 @@ struct ProvisioningInfo: Equatable {
         lines.append("到期時間：\(formatter.string(from: expirationDate))")
         lines.append("剩餘時間：\(days) 天 \(hours) 小時 \(minutes) 分 \(seconds) 秒")
         lines.append("")
-        lines.append("當電腦開機且與 iPhone 連同一個 Wi-Fi 時，Sideloadly 會自動續簽並將倒數重設回 7 天。")
+        lines.append("當剩餘時間少於 2 天時，連上 Wi-Fi 並透過 SideStore（開啟 LocalDevVPN）或 Sideloadly 即可續簽並將倒數重設回 7 天。")
         return lines.joined(separator: "\n")
     }
 
